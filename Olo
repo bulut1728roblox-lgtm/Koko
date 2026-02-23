@@ -1,0 +1,68 @@
+-- Monday Morning Misery | Full Sick Autoplayer (No Miss - Hold Fix) - Saf Lua 2026
+-- Şarkı başlamadan önce çalıştır, AutoPlayEnabled = false ile kapat
+
+local VirtualInput = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+
+getgenv().AutoPlayEnabled = true
+getgenv().SickEarlyOffset = 46      -- Sick için erken vur (42-52 arası dene, yüksek = daha Sick ama lag riski)
+getgenv().MissMargin = 65           -- Note bu kadar geçerse vurma (miss önleme)
+getgenv().HoldReleaseExtra = 0.025  -- Hold'larda ekstra tutma (patlamasın)
+getgenv().Keys = {
+    Left  = Enum.KeyCode.A,
+    Down  = Enum.KeyCode.S,
+    Up    = Enum.KeyCode.W,
+    Right = Enum.KeyCode.D
+}
+
+local heldNotes = {}  -- Basılı hold'ları takip et
+
+local function GetNoteDir(note)
+    local n = note.Name:lower()
+    if n:find("left")   then return "Left"   end
+    if n:find("down")   then return "Down"   end
+    if n:find("up")     then return "Up"     end
+    if n:find("right")  then return "Right"  end
+    return nil
+end
+
+RunService.RenderStepped:Connect(function(delta)
+    if not AutoPlayEnabled then return end
+    
+    local gui = lp.PlayerGui:FindFirstChild("GameUI")
+    if not gui then return end
+    
+    local receptors = gui:FindFirstChild("Receptors") or gui:FindFirstChild("Arrows")  -- Bazı update'lerde isim değişir
+    if not receptors then return end
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if (not obj:IsA("ImageLabel") and not obj:IsA("Frame")) or not obj.Visible then continue end
+        
+        local dir = GetNoteDir(obj)
+        if not dir then continue end
+        
+        local noteY = obj.AbsolutePosition.Y
+        local recY  = receptors[dir.."Receptor"] and receptors[dir.."Receptor"].AbsolutePosition.Y or receptors.AbsolutePosition.Y
+        
+        if noteY <= recY + SickEarlyOffset and noteY >= recY - MissMargin then
+            local key = Keys[dir]
+            if key then
+                -- Bas
+                VirtualInput:SendKeyEvent(true, key, false, game)
+                
+                if obj.Name:lower():find("hold") or obj.Name:lower():find("sustain") then
+                    heldNotes[obj] = {key = key, start = tick()}
+                else
+                    -- Normal note: kısa bas-bırak
+                    task.delay(0.012 + delta, function()
+                        VirtualInput:SendKeyEvent(false, key, false, game)
+                    end)
+                end
+            end
+        end
+    end
+    
+    -- Hold kontrol: note geçtiyse bırak (stuck önleme)
+    for note,
